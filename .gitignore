@@ -1,0 +1,14 @@
+# Compiled binary
+/mock-as
+/veramo-mock-as
+
+# Go test / coverage output
+*.test
+*.out
+coverage.txt
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp

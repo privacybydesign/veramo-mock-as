@@ -4,7 +4,9 @@
 // issuer to complete an authorization code flow:
 //
 //   - Discovery  (/.well-known/oauth-authorization-server, /.well-known/openid-configuration)
-//   - Authorize  (GET /authorize) — returns an auth code immediately (no real login)
+//   - Authorize  (GET /authorize) — issues an auth code immediately (no real login). If
+//                                   redirect_uri is present, responds with a 302 to that
+//                                   URI with code+state appended; otherwise returns JSON.
 //   - Token      (POST /token)    — exchanges code for an access token
 //   - Introspect (POST /introspect) — lets the issuer verify the token and recover issuer_state
 //   - JWKS       (GET /jwks)       — empty key set (signatures not checked in tests)
@@ -22,6 +24,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -75,7 +78,7 @@ type authorizationServer struct {
 // ---------------------------------------------------------------------------
 
 func (s *authorizationServer) handleDiscovery(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"issuer":                               s.externalURL,
 		"authorization_endpoint":               s.externalURL + "/authorize",
 		"token_endpoint":                       s.externalURL + "/token",
@@ -87,12 +90,13 @@ func (s *authorizationServer) handleDiscovery(w http.ResponseWriter, r *http.Req
 }
 
 func (s *authorizationServer) handleJWKS(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{"keys": []interface{}{}})
+	writeJSON(w, http.StatusOK, map[string]any{"keys": []any{}})
 }
 
 func (s *authorizationServer) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	issuerState := r.URL.Query().Get("issuer_state")
 	clientState := r.URL.Query().Get("state")
+	redirectUri := r.URL.Query().Get("redirect_uri")
 
 	code := randomHex()
 
@@ -105,7 +109,24 @@ func (s *authorizationServer) handleAuthorize(w http.ResponseWriter, r *http.Req
 
 	log.Printf("/authorize issuer_state=%s → code=%s", issuerState, code[:16])
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	if redirectUri != "" {
+		// Real-wallet path: 302 to the wallet's redirect_uri with code+state appended.
+		target, err := url.Parse(redirectUri)
+		if err != nil {
+			http.Error(w, "invalid redirect_uri", http.StatusBadRequest)
+			return
+		}
+		q := target.Query()
+		q.Set("code", code)
+		q.Set("state", clientState)
+		target.RawQuery = q.Encode()
+		http.Redirect(w, r, target.String(), http.StatusFound)
+		return
+	}
+
+	// Legacy JSON path: preserved for integration tests that call /authorize directly
+	// (no browser, no redirect_uri) and JSON-decode the body.
+	writeJSON(w, http.StatusOK, map[string]any{
 		"code":  code,
 		"state": clientState,
 	})
@@ -136,7 +157,7 @@ func (s *authorizationServer) handleToken(w http.ResponseWriter, r *http.Request
 
 	log.Printf("/token code=%s → token=%s", code[:16], token[:16])
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"access_token": token,
 		"token_type":   "bearer",
 		"expires_in":   3600,
@@ -154,18 +175,18 @@ func (s *authorizationServer) handleIntrospect(w http.ResponseWriter, r *http.Re
 
 	if !ok || token == "" {
 		log.Printf("/introspect unknown token")
-		writeJSON(w, http.StatusOK, map[string]interface{}{})
+		writeJSON(w, http.StatusOK, map[string]any{})
 		return
 	}
 
 	log.Printf("/introspect token=%s → issuer_state=%s", token[:16], entry.issuerState)
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"user_info": map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user_info": map[string]any{
 			"sub":   "test-user",
 			"email": "test@example.com",
 		},
-		"token_details": map[string]interface{}{
+		"token_details": map[string]any{
 			"issuer_state": entry.issuerState,
 			"active":       true,
 		},
@@ -176,14 +197,14 @@ func (s *authorizationServer) handleIntrospect(w http.ResponseWriter, r *http.Re
 // Helpers
 // ---------------------------------------------------------------------------
 
-func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
 }
 
 func randomHex() string {
-	h := sha256.Sum256([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
+	h := sha256.Sum256(fmt.Appendf(nil, "%d", time.Now().UnixNano()))
 	return hex.EncodeToString(h[:])
 }
 

@@ -94,9 +94,15 @@ func (s *authorizationServer) handleJWKS(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *authorizationServer) handleAuthorize(w http.ResponseWriter, r *http.Request) {
-	issuerState := r.URL.Query().Get("issuer_state")
-	clientState := r.URL.Query().Get("state")
-	redirectUri := r.URL.Query().Get("redirect_uri")
+	q := r.URL.Query()
+	issuerState := q.Get("issuer_state")
+	clientState := q.Get("state")
+	redirectUri := q.Get("redirect_uri")
+
+	log.Printf("/authorize %s from %s: client_id=%q response_type=%q scope=%q redirect_uri=%q state=%q issuer_state=%q",
+		r.Method, r.RemoteAddr,
+		q.Get("client_id"), q.Get("response_type"), q.Get("scope"),
+		redirectUri, clientState, issuerState)
 
 	code := randomHex()
 

@@ -16,5 +16,5 @@ jobs:
       packages: read
       security-events: write
     with:
-      tags: edge latest # no GitHub releases; staging runs :latest
+      tags: edge # no GitHub releases yet; staging runs :edge
       severity-cutoff: high

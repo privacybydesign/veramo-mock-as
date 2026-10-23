@@ -1,7 +1,7 @@
 # Delivery: builds, scans and pushes ghcr.io/privacybydesign/veramo-mock-as
-# (linux/amd64 + linux/arm64). Push to main -> :edge and :latest, release ->
-# :x.y.z. PR builds are scanned in Status checks; published images are
-# re-scanned weekly by image-rescan.yml.
+# (linux/amd64 + linux/arm64). Push to main -> :edge, release -> :x.y.z.
+# PR builds are scanned in Status checks; published images are re-scanned
+# weekly by image-rescan.yml.
 name: Delivery
 
 on:
@@ -24,28 +24,3 @@ jobs:
       attestations: write
     with:
       platforms: linux/amd64,linux/arm64
-
-  # The old workflow pushed :latest on every push to main, and the staging
-  # deployment (openid4vc-poc-ops) pulls :latest. docker-publish.yml only tags
-  # :latest for releases, so point :latest at the digest it just published
-  # (no rebuild). Remove this job once staging uses :edge.
-  latest:
-    needs: docker
-    if: needs.docker.outputs.published == 'true' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      packages: write
-    steps:
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Tag the published digest as :latest
-        env:
-          IMAGE: ${{ needs.docker.outputs.image }}
-          DIGEST: ${{ needs.docker.outputs.digest }}
-        run: docker buildx imagetools create --tag "${IMAGE}:latest" "${IMAGE}@${DIGEST}"

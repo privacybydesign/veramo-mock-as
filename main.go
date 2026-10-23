@@ -5,8 +5,8 @@
 //
 //   - Discovery  (/.well-known/oauth-authorization-server, /.well-known/openid-configuration)
 //   - Authorize  (GET /authorize) — issues an auth code immediately (no real login). If
-//                                   redirect_uri is present, responds with a 302 to that
-//                                   URI with code+state appended; otherwise returns JSON.
+//     redirect_uri is present, responds with a 302 to that URI with code+state
+//     appended; otherwise returns JSON.
 //   - Token      (POST /token)    — exchanges code for an access token
 //   - Introspect (POST /introspect) — lets the issuer verify the token and recover issuer_state
 //   - JWKS       (GET /jwks)       — empty key set (signatures not checked in tests)
@@ -139,7 +139,11 @@ func (s *authorizationServer) handleAuthorize(w http.ResponseWriter, r *http.Req
 }
 
 func (s *authorizationServer) handleToken(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		log.Printf("/token malformed form: %v", err)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
+		return
+	}
 	code := r.FormValue("code")
 
 	s.mu.Lock()
@@ -171,7 +175,11 @@ func (s *authorizationServer) handleToken(w http.ResponseWriter, r *http.Request
 }
 
 func (s *authorizationServer) handleIntrospect(w http.ResponseWriter, r *http.Request) {
-	r.ParseForm()
+	if err := r.ParseForm(); err != nil {
+		log.Printf("/introspect malformed form: %v", err)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
+		return
+	}
 	// The veramo-agent sends the token as "access-token" form parameter.
 	token := r.FormValue("access-token")
 
@@ -206,7 +214,9 @@ func (s *authorizationServer) handleIntrospect(w http.ResponseWriter, r *http.Re
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("writing JSON response: %v", err)
+	}
 }
 
 func randomHex() string {

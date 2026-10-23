@@ -1,0 +1,26 @@
+# Delivery: builds, scans and pushes ghcr.io/privacybydesign/veramo-mock-as
+# (linux/amd64 + linux/arm64). Push to main -> :edge, release -> :x.y.z.
+# PR builds are scanned in Status checks; published images are re-scanned
+# weekly by image-rescan.yml.
+name: Delivery
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  docker:
+    uses: privacybydesign/github-workflows/.github/workflows/docker-publish.yml@v1
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+      id-token: write
+      attestations: write
+    with:
+      platforms: linux/amd64,linux/arm64

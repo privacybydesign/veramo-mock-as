@@ -397,3 +397,39 @@ func TestIntrospect_EmptyToken_ReturnsEmpty(t *testing.T) {
 		t.Errorf("body = %q, want {}", got)
 	}
 }
+
+func TestToken_MalformedForm_Returns400(t *testing.T) {
+	s := newTestServer()
+	req := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader("code=%zz"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	s.handleToken(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+
+	var body map[string]string
+	_ = json.NewDecoder(w.Body).Decode(&body)
+	if body["error"] != "invalid_request" {
+		t.Errorf("error = %q, want invalid_request", body["error"])
+	}
+}
+
+func TestIntrospect_MalformedForm_Returns400(t *testing.T) {
+	s := newTestServer()
+	req := httptest.NewRequest(http.MethodPost, "/introspect", strings.NewReader("access-token=%zz"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	s.handleIntrospect(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
+	}
+
+	var body map[string]string
+	_ = json.NewDecoder(w.Body).Decode(&body)
+	if body["error"] != "invalid_request" {
+		t.Errorf("error = %q, want invalid_request", body["error"])
+	}
+}
